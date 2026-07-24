@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.sociallimiter.app.overlay.BlockingFrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F2101418">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="32dp">
+
+        <TextView
+            android:id="@+id/promptAppName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#9FB3C8"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"
+            tools:ignore="HardcodedText"
+            android:text="App" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            tools:ignore="HardcodedText"
+            android:text="How many minutes?" />
+
+        <EditText
+            android:id="@+id/promptMinutes"
+            android:layout_width="180dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:inputType="number"
+            android:maxLength="3"
+            android:gravity="center"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#5B6B7B"
+            android:textSize="40sp"
+            android:hint="10"
+            android:importantForAutofill="no"
+            tools:ignore="HardcodedText,LabelFor" />
+
+        <TextView
+            android:id="@+id/promptError"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF6B6B"
+            android:textSize="14sp"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"
+            tools:ignore="HardcodedText"
+            android:text="Enter 1-180 minutes" />
+
+        <Button
+            android:id="@+id/promptOk"
+            android:layout_width="180dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:backgroundTint="#4C8BF5"
+            android:textColor="#FFFFFF"
+            tools:ignore="HardcodedText"
+            android:text="OK" />
+    </LinearLayout>
+</com.sociallimiter.app.overlay.BlockingFrameLayout>

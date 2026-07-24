@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SocialLimiter</string>
+    <string name="accessibility_description">SocialLimiter watches which app is in the foreground so it can enforce your self-imposed time limits and cooldowns. It never collects or transmits any data.</string>
+    <string name="channel_countdown">Session countdown</string>
+    <string name="channel_countdown_desc">Shows the time remaining in an active app session.</string>
+    <string name="countdown_title">%1$s — time limit running</string>
+</resources>
