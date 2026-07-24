@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
+import android.view.inputmethod.InputMethodManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,25 @@ class AppMonitorService : AccessibilityService() {
 
     private var lastHandledPackage: String? = null
 
+    /**
+     * Packages that must never count as a foreground app change: our own overlays,
+     * the system UI, and any installed input method. Opening the keyboard fires a
+     * window-state-changed event for the IME's package; treating that as "left the
+     * monitored app" would tear down the prompt (and its keyboard) mid-typing.
+     */
+    private val ignoredPackages: MutableSet<String> = mutableSetOf(
+        "com.android.systemui",
+        "android",
+    )
+
+    private fun refreshInputMethodPackages() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
+        runCatching {
+            imm.enabledInputMethodList.forEach { ignoredPackages.add(it.packageName) }
+            imm.inputMethodList.forEach { ignoredPackages.add(it.packageName) }
+        }
+    }
+
     private val poller = object : Runnable {
         override fun run() {
             pollForeground()
@@ -38,6 +58,8 @@ class AppMonitorService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instanceRunning = true
+        ignoredPackages.add(packageName)
+        refreshInputMethodPackages()
         mainHandler.postDelayed(poller, POLL_INTERVAL_MS)
     }
 
@@ -45,17 +67,16 @@ class AppMonitorService : AccessibilityService() {
         if (event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName) return // ignore our own overlays
         handlePackage(pkg)
     }
 
     private fun pollForeground() {
         val pkg = queryForegroundPackage(this) ?: return
-        if (pkg == packageName) return
         handlePackage(pkg)
     }
 
     private fun handlePackage(pkg: String) {
+        if (pkg in ignoredPackages) return
         // Deduplicate rapid repeats of the same package to avoid overlay churn,
         // but always let the engine re-evaluate a genuinely new foreground app.
         if (pkg == lastHandledPackage) return

@@ -108,6 +108,7 @@ object OverlayManager {
                 wm(context).addView(view, baseParams(focusable = true))
                 promptView = view
                 promptPackage = packageName
+                input.requestFocus()
             } catch (_: Exception) {
                 // View may already be attached, or permission revoked mid-flight.
             }

@@ -23,9 +23,13 @@ class LimiterEngine(context: Context) {
     suspend fun onForeground(pkg: String) {
         val monitored = repo.getMonitored(pkg)
         if (monitored == null || !monitored.isEnabled) {
-            // Not (or no longer) monitored: tear down any overlay so we never
-            // strand a block on top of an innocent app.
-            OverlayManager.dismissAll()
+            // Left the monitored app (e.g. went to the launcher). Dismiss only the
+            // "how many minutes?" prompt, since its target app is no longer up.
+            // The locked overlay is intentionally left alone: it is shown *over*
+            // the home screen after a session ends and manages its own lifecycle
+            // (its button / the cooldown timer), so a launcher event must not tear
+            // it down.
+            OverlayManager.dismissPrompt()
             return
         }
 
@@ -57,6 +61,7 @@ class LimiterEngine(context: Context) {
         }
 
         // 3. Fresh open, no cooldown, no session: ask for a duration.
+        OverlayManager.dismissLocked()
         OverlayManager.showPrompt(
             appContext, pkg, monitored.appName,
         ) { p, minutes -> beginSession(p, minutes) }
