@@ -79,10 +79,21 @@ class CountdownService : Service() {
 
         tickerJob?.cancel()
         tickerJob = scope.launch {
+            // Accrue real elapsed foreground time toward the shared daily budget.
+            var lastAccrual = System.currentTimeMillis()
             while (isActive) {
                 val now = System.currentTimeMillis()
+                repo.addUsage(now - lastAccrual)
+                lastAccrual = now
+
+                // Daily budget exhausted mid-session: end now, block until midnight.
+                if (repo.remainingBudgetMillis() <= 0L) {
+                    engine.expireSession(pkg, LimiterEngine.EndReason.DAILY_BUDGET)
+                    stopSelfSafely()
+                    return@launch
+                }
                 if (now >= endAt) {
-                    engine.expireSession(pkg)
+                    engine.expireSession(pkg, LimiterEngine.EndReason.TIMER)
                     stopSelfSafely()
                     return@launch
                 }

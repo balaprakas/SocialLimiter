@@ -40,3 +40,35 @@ data class ActiveSession(
     @PrimaryKey val packageName: String,
     val endTimestamp: Long,
 )
+
+/**
+ * Accumulated foreground time across ALL monitored apps for a single local day.
+ * [date] is an ISO `yyyy-MM-dd` string in the device's local time zone, so a new
+ * day naturally starts with a fresh (absent) row — i.e. the budget resets at
+ * midnight with no scheduled job.
+ */
+@Entity(tableName = "daily_usage")
+data class DailyUsage(
+    @PrimaryKey val date: String,
+    val usedMillis: Long,
+)
+
+/**
+ * A recurring blackout window during which every monitored app is blocked. The
+ * window starts on each selected day of [daysMask] at [startMinuteOfDay] and ends
+ * at [endMinuteOfDay]; if end <= start it is treated as crossing midnight into the
+ * following day.
+ *
+ * @param daysMask bit i (0 = Monday .. 6 = Sunday) set means the window applies on
+ *        that day (the day the window *starts*).
+ * @param startMinuteOfDay minutes since local midnight, 0..1439.
+ * @param endMinuteOfDay minutes since local midnight, 0..1439.
+ */
+@Entity(tableName = "schedule")
+data class Schedule(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val daysMask: Int,
+    val startMinuteOfDay: Int,
+    val endMinuteOfDay: Int,
+    val isEnabled: Boolean = true,
+)

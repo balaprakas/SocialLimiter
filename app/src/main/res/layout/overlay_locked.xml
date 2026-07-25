@@ -15,6 +15,7 @@
         android:padding="32dp">
 
         <TextView
+            android:id="@+id/lockedTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFF"
@@ -46,6 +47,7 @@
             android:text="15:00" />
 
         <TextView
+            android:id="@+id/lockedSubtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"

@@ -83,21 +83,32 @@ object OverlayManager {
         fun onConfirmed(packageName: String, minutes: Int)
     }
 
-    @SuppressLint("InflateParams")
-    fun showPrompt(context: Context, packageName: String, appName: String, onConfirmed: OnMinutesConfirmed) {
+    @SuppressLint("InflateParams", "SetTextI18n")
+    fun showPrompt(
+        context: Context,
+        packageName: String,
+        appName: String,
+        maxMinutes: Int,
+        remainingTodayMinutes: Int,
+        onConfirmed: OnMinutesConfirmed,
+    ) {
         main.post {
             if (!canDrawOverlays(context)) return@post
             // Already showing for the same package: leave it be.
             if (promptView != null && promptPackage == packageName) return@post
             dismissPromptInternal(context)
 
+            val cap = maxMinutes.coerceIn(1, MAX_MINUTES)
             val view = LayoutInflater.from(context).inflate(R.layout.overlay_prompt, null)
             view.findViewById<TextView>(R.id.promptAppName).text = appName
+            view.findViewById<TextView>(R.id.promptBudget).text =
+                "$remainingTodayMinutes min left today"
             val input = view.findViewById<EditText>(R.id.promptMinutes)
             val error = view.findViewById<TextView>(R.id.promptError)
+            error.text = "Enter 1-$cap minutes"
             view.findViewById<Button>(R.id.promptOk).setOnClickListener {
                 val minutes = input.text.toString().toIntOrNull()
-                if (minutes == null || minutes < 1 || minutes > MAX_MINUTES) {
+                if (minutes == null || minutes < 1 || minutes > cap) {
                     error.visibility = View.VISIBLE
                     return@setOnClickListener
                 }
@@ -131,12 +142,25 @@ object OverlayManager {
     }
 
     @SuppressLint("InflateParams")
-    fun showLocked(context: Context, packageName: String, appName: String, unlockAt: Long, onHome: () -> Unit) {
+    fun showLocked(
+        context: Context,
+        packageName: String,
+        appName: String,
+        title: String,
+        subtitle: String,
+        unlockAt: Long,
+        onHome: () -> Unit,
+    ) {
         main.post {
             if (!canDrawOverlays(context)) return@post
             lockedUnlockAt = unlockAt
             if (lockedView != null && lockedPackage == packageName) {
-                // Refresh the visible countdown target and keep the same view.
+                // Refresh text + countdown target and keep the same view.
+                lockedView?.let {
+                    it.findViewById<TextView>(R.id.lockedTitle).text = title
+                    it.findViewById<TextView>(R.id.lockedSubtitle).text = subtitle
+                    it.findViewById<TextView>(R.id.lockedAppName).text = appName
+                }
                 main.removeCallbacks(lockedTicker)
                 main.post(lockedTicker)
                 return@post
@@ -144,6 +168,8 @@ object OverlayManager {
             dismissLockedInternal(context)
 
             val view = LayoutInflater.from(context).inflate(R.layout.overlay_locked, null)
+            view.findViewById<TextView>(R.id.lockedTitle).text = title
+            view.findViewById<TextView>(R.id.lockedSubtitle).text = subtitle
             view.findViewById<TextView>(R.id.lockedAppName).text = appName
             view.findViewById<TextView>(R.id.lockedRemaining).text =
                 formatMs(unlockAt - System.currentTimeMillis())

@@ -1,6 +1,7 @@
 package com.sociallimiter.app.data
 
 import android.content.Context
+import com.sociallimiter.app.util.TimeUtils
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -14,6 +15,8 @@ class LimiterRepository private constructor(context: Context) {
     private val monitoredDao = db.monitoredAppDao()
     private val cooldownDao = db.cooldownDao()
     private val sessionDao = db.activeSessionDao()
+    private val dailyUsageDao = db.dailyUsageDao()
+    private val scheduleDao = db.scheduleDao()
     private val settings = SettingsStore(context)
 
     // --- Monitored apps ---
@@ -42,6 +45,35 @@ class LimiterRepository private constructor(context: Context) {
     suspend fun startSession(pkg: String, endTimestamp: Long) =
         sessionDao.upsert(ActiveSession(pkg, endTimestamp))
     suspend fun clearSession(pkg: String) = sessionDao.clear(pkg)
+
+    // --- Daily usage / budget ---
+    val dailyBudgetMinutes: Flow<Int> = settings.dailyBudgetMinutes
+    suspend fun setDailyBudgetMinutes(minutes: Int) = settings.setDailyBudgetMinutes(minutes)
+
+    fun observeTodayUsage(): Flow<DailyUsage?> = dailyUsageDao.observe(TimeUtils.dayKey())
+
+    suspend fun usedMillisToday(): Long = dailyUsageDao.getUsed(TimeUtils.dayKey()) ?: 0L
+
+    /** Adds [deltaMillis] of foreground time to today's bucket and prunes old days. */
+    suspend fun addUsage(deltaMillis: Long) {
+        if (deltaMillis <= 0) return
+        val key = TimeUtils.dayKey()
+        val current = dailyUsageDao.getUsed(key) ?: 0L
+        dailyUsageDao.upsert(DailyUsage(key, current + deltaMillis))
+        dailyUsageDao.deleteAllExcept(key)
+    }
+
+    /** Remaining daily budget in millis (>= 0). */
+    suspend fun remainingBudgetMillis(): Long {
+        val budgetMillis = settings.getDailyBudgetMinutes() * 60_000L
+        return (budgetMillis - usedMillisToday()).coerceAtLeast(0L)
+    }
+
+    // --- Schedules ---
+    val schedules: Flow<List<Schedule>> = scheduleDao.observeAll()
+    suspend fun enabledSchedules(): List<Schedule> = scheduleDao.getEnabled()
+    suspend fun upsertSchedule(schedule: Schedule) = scheduleDao.upsert(schedule)
+    suspend fun deleteSchedule(id: Long) = scheduleDao.delete(id)
 
     // --- Settings ---
     val defaultCooldownMinutes: Flow<Int> = settings.defaultCooldownMinutes

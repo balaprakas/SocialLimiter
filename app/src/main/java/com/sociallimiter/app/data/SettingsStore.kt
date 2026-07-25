@@ -28,8 +28,20 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_DEFAULT_COOLDOWN] = minutes.coerceAtLeast(1) }
     }
 
+    val dailyBudgetMinutes: Flow<Int> =
+        context.dataStore.data.map { it[KEY_DAILY_BUDGET] ?: DEFAULT_DAILY_BUDGET_MINUTES }
+
+    suspend fun getDailyBudgetMinutes(): Int =
+        dailyBudgetMinutes.first()
+
+    suspend fun setDailyBudgetMinutes(minutes: Int) {
+        context.dataStore.edit { it[KEY_DAILY_BUDGET] = minutes.coerceAtLeast(1) }
+    }
+
     companion object {
         const val DEFAULT_COOLDOWN_MINUTES = 15
+        const val DEFAULT_DAILY_BUDGET_MINUTES = 120
         private val KEY_DEFAULT_COOLDOWN = intPreferencesKey("default_cooldown_minutes")
+        private val KEY_DAILY_BUDGET = intPreferencesKey("daily_budget_minutes")
     }
 }

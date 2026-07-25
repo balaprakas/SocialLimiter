@@ -1,8 +1,11 @@
 package com.sociallimiter.app.ui
 
+import android.app.TimePickerDialog
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,9 +19,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,7 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
+import com.sociallimiter.app.data.Schedule
 import com.sociallimiter.app.util.PermissionUtils
+import com.sociallimiter.app.util.TimeUtils
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,8 +86,13 @@ fun MainScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { Spacer(Modifier.height(4.dp)) }
+            state.globalBlockLabel?.let { label ->
+                item { GlobalBlockBanner(label) }
+            }
             item { PermissionsCard(context, permissionTick, onRequestNotifications) }
+            item { DailyBudgetCard(state, viewModel) }
             item { GlobalCooldownCard(state, viewModel) }
+            item { SchedulesCard(state, viewModel) }
             item {
                 SectionHeader("Monitored apps", "Active session, cooldown, or idle")
             }
@@ -193,6 +205,201 @@ private fun GlobalCooldownCard(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
+private fun GlobalBlockBanner(label: String) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = Color(0xFF7A1F2B),
+        ),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFFFD5DB))
+            Spacer(Modifier.width(12.dp))
+            Text(label, color = Color(0xFFFFE6EA),
+                style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun DailyBudgetCard(state: UiState, viewModel: MainViewModel) {
+    var text by remember(state.dailyBudgetMinutes) {
+        mutableStateOf(state.dailyBudgetMinutes.toString())
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Daily budget", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Total time across all monitored apps per day. Resets at midnight.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "${formatRemaining(state.remainingTodayMillis)} left today",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (state.remainingTodayMillis <= 0L) Color(0xFFE0902B) else Color(0xFF2E9E5B),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.filter(Char::isDigit).take(4) },
+                    label = { Text("Minutes/day") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(160.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = {
+                    text.toIntOrNull()?.takeIf { it >= 1 }?.let(viewModel::setDailyBudget)
+                }) { Text("Save") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SchedulesCard(state: UiState, viewModel: MainViewModel) {
+    var editing by remember { mutableStateOf<Schedule?>(null) }
+    var showDialog by remember { mutableStateOf(false) }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Scheduled breaks", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Block all monitored apps during a recurring time window.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.schedules.isEmpty()) {
+                Text("No schedules yet.", style = MaterialTheme.typography.bodyMedium)
+            }
+            state.schedules.forEach { schedule ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(scheduleDaysLabel(schedule.daysMask),
+                            style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "${TimeUtils.formatMinuteOfDay(schedule.startMinuteOfDay)} – " +
+                                TimeUtils.formatMinuteOfDay(schedule.endMinuteOfDay),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { editing = schedule; showDialog = true }) { Text("Edit") }
+                    Switch(
+                        checked = schedule.isEnabled,
+                        onCheckedChange = { viewModel.toggleSchedule(schedule, it) },
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = { editing = null; showDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Add schedule") }
+        }
+    }
+
+    if (showDialog) {
+        ScheduleDialog(
+            initial = editing,
+            onDismiss = { showDialog = false },
+            onDelete = editing?.let { s -> { viewModel.deleteSchedule(s); showDialog = false } },
+            onSave = { schedule -> viewModel.saveSchedule(schedule); showDialog = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ScheduleDialog(
+    initial: Schedule?,
+    onDismiss: () -> Unit,
+    onDelete: (() -> Unit)?,
+    onSave: (Schedule) -> Unit,
+) {
+    val context = LocalContext.current
+    var days by remember { mutableIntStateOf(initial?.daysMask ?: WEEKDAYS_MASK) }
+    var start by remember { mutableIntStateOf(initial?.startMinuteOfDay ?: 10 * 60) }
+    var end by remember { mutableIntStateOf(initial?.endMinuteOfDay ?: 20 * 60) }
+
+    fun pickTime(current: Int, onPicked: (Int) -> Unit) {
+        TimePickerDialog(
+            context,
+            { _, h, m -> onPicked(h * 60 + m) },
+            current / 60, current % 60, false,
+        ).show()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial == null) "New schedule" else "Edit schedule") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Days", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DAY_LABELS.forEachIndexed { index, label ->
+                        val selected = (days and (1 shl index)) != 0
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                days = if (selected) days and (1 shl index).inv()
+                                else days or (1 shl index)
+                            },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { days = WEEKDAYS_MASK }) { Text("Weekdays") }
+                    TextButton(onClick = { days = WEEKEND_MASK }) { Text("Weekend") }
+                    TextButton(onClick = { days = ALL_DAYS_MASK }) { Text("Every day") }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("From", Modifier.width(52.dp))
+                    OutlinedButton(onClick = { pickTime(start) { start = it } }) {
+                        Text(TimeUtils.formatMinuteOfDay(start))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text("to", Modifier.width(28.dp))
+                    OutlinedButton(onClick = { pickTime(end) { end = it } }) {
+                        Text(TimeUtils.formatMinuteOfDay(end))
+                    }
+                }
+                if (end <= start) {
+                    Text(
+                        "Ends next day (crosses midnight)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = days != 0,
+                onClick = {
+                    onSave(
+                        (initial ?: Schedule(daysMask = 0, startMinuteOfDay = 0, endMinuteOfDay = 0))
+                            .copy(daysMask = days, startMinuteOfDay = start, endMinuteOfDay = end),
+                    )
+                },
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (onDelete != null) {
+                    TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFD05555)) }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+@Composable
 private fun MonitoredAppCard(row: MonitoredRow, viewModel: MainViewModel) {
     var editingCooldown by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
@@ -291,6 +498,19 @@ private fun AddAppsList(state: UiState, viewModel: MainViewModel) {
             }
         }
     }
+}
+
+private val DAY_LABELS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+private const val WEEKDAYS_MASK = 0b0011111   // Mon..Fri
+private const val WEEKEND_MASK = 0b1100000    // Sat, Sun
+private const val ALL_DAYS_MASK = 0b1111111
+
+private fun scheduleDaysLabel(mask: Int): String = when (mask) {
+    ALL_DAYS_MASK -> "Every day"
+    WEEKDAYS_MASK -> "Weekdays"
+    WEEKEND_MASK -> "Weekends"
+    else -> DAY_LABELS.filterIndexed { i, _ -> (mask and (1 shl i)) != 0 }
+        .joinToString(", ").ifEmpty { "No days" }
 }
 
 private fun statusColor(status: AppStatus): Color = when (status) {

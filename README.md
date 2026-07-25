@@ -1,10 +1,13 @@
 # SocialLimiter
 
 A personal-use Android app (Kotlin) that enforces a **self-imposed time limit +
-cooldown** on apps you choose. Open a monitored app → it asks *"How many
-minutes?"* → when the timer runs out you're sent home and the app is **locked
-for a cooldown period** (15 min by default). Fully local/offline — no backend,
-no analytics, no network calls.
+cooldown** on apps you choose, plus a **shared daily budget** and **scheduled
+blackout windows**. Open a monitored app → it asks *"How many minutes?"* → when
+the timer runs out you're sent home and the app is **locked for a cooldown
+period** (15 min by default). Across the day, all monitored apps share a single
+time budget (2 h by default, resets at midnight), and you can define recurring
+windows (e.g. weekdays 10 AM–8 PM) during which every monitored app is blocked.
+Fully local/offline — no backend, no analytics, no network calls.
 
 > Not intended for the Play Store. Build the debug APK and sideload it.
 
@@ -29,12 +32,22 @@ no analytics, no network calls.
 - **Time's up → cooldown**: sends you to the home screen, records a cooldown in
   Room (`CooldownState`), and shows a **"locked" overlay** with a live countdown
   if you try to reopen the app.
+- **Shared daily budget**: all monitored apps draw from one daily time pool
+  (default 120 min, configurable). Real foreground time is accrued while a
+  session runs; when the budget is exhausted every monitored app is blocked
+  until **local midnight**, when it resets automatically (`DailyUsage` keyed by
+  date). The "How many minutes?" prompt is capped to the time left today.
+- **Scheduled blackout windows**: define recurring windows by days-of-week +
+  start/end time (`Schedule` table). During an active window every monitored app
+  is blocked with a "Scheduled break" overlay. Windows whose end time is at or
+  before the start time are treated as crossing midnight.
 - **Persistent across kills & reboots**: active sessions and cooldowns live in
   Room and are restored on `BOOT_COMPLETED`.
 - **Settings UI** (Jetpack Compose): permission status + one-tap grant buttons,
-  global default cooldown, per-app cooldown override, per-app live status
-  (idle / active session / in cooldown), and a searchable installed-apps list to
-  add/remove monitored apps.
+  daily budget + time-left-today, global default cooldown, per-app cooldown
+  override, scheduled-break editor (day chips + time pickers), per-app live
+  status (idle / active session / in cooldown), and a searchable installed-apps
+  list to add/remove monitored apps.
 
 ## Requirements
 
@@ -114,17 +127,22 @@ differs.
 
 ## How it works
 
-1. You open a monitored app.
-2. If it's **in cooldown** → you're bounced to the home screen and shown the
-   "locked, X remaining" overlay.
-3. Otherwise → the **"How many minutes?"** overlay appears; enter minutes, tap
-   OK.
-4. A **foreground countdown** starts (persistent notification). Use the app
-   normally until it ends.
-5. On zero → home screen + a **cooldown** window opens (default 15 min,
-   configurable globally or per app). Reopening during cooldown re-shows the
-   locked overlay.
-6. After cooldown expires → next open starts back at step 3.
+When a monitored app comes to the foreground, checks apply in this order:
+
+1. **Scheduled break active?** → bounced home + "Scheduled break" overlay until
+   the window ends.
+2. **In cooldown?** → bounced home + "locked, until HH:MM" overlay.
+3. **Active session running?** → allowed until it expires.
+4. **Daily budget used up?** → bounced home + "Daily limit reached" overlay until
+   midnight.
+5. **Otherwise** → the **"How many minutes?"** overlay appears (capped to the
+   time left in today's budget); enter minutes, tap OK.
+
+Then a **foreground countdown** starts (persistent notification) and real
+in-app time is subtracted from the daily budget. On zero → home screen + a
+**cooldown** window opens (default 15 min, configurable globally or per app). If
+the daily budget runs out mid-session, the session ends early and everything is
+blocked until midnight.
 
 ### Project layout
 ```
@@ -151,3 +169,8 @@ It's added to the Room-backed monitored list immediately — no rebuild needed.
   aggressive OEM skins you may need to also "lock" the app in recents.
 - This is a self-discipline tool, not a security boundary — a determined user
   with device settings access can disable it.
+- Daily-budget time is accrued while a timed session is running (i.e. the minutes
+  you committed to), not by sampling exact foreground focus second-by-second, so
+  backgrounding an app mid-session still counts toward the day's budget.
+- The daily budget resets at **local** midnight; changing the device time zone
+  shifts the reset accordingly.

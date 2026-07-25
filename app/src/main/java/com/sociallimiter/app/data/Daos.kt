@@ -67,3 +67,33 @@ interface ActiveSessionDao {
     @Query("DELETE FROM active_session")
     suspend fun clearAll()
 }
+
+@Dao
+interface DailyUsageDao {
+    @Query("SELECT * FROM daily_usage WHERE date = :date LIMIT 1")
+    fun observe(date: String): Flow<DailyUsage?>
+
+    @Query("SELECT usedMillis FROM daily_usage WHERE date = :date LIMIT 1")
+    suspend fun getUsed(date: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(usage: DailyUsage)
+
+    @Query("DELETE FROM daily_usage WHERE date != :keepDate")
+    suspend fun deleteAllExcept(keepDate: String)
+}
+
+@Dao
+interface ScheduleDao {
+    @Query("SELECT * FROM schedule ORDER BY startMinuteOfDay ASC")
+    fun observeAll(): Flow<List<Schedule>>
+
+    @Query("SELECT * FROM schedule WHERE isEnabled = 1")
+    suspend fun getEnabled(): List<Schedule>
+
+    @Upsert
+    suspend fun upsert(schedule: Schedule)
+
+    @Query("DELETE FROM schedule WHERE id = :id")
+    suspend fun delete(id: Long)
+}
