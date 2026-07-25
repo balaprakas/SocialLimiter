@@ -80,5 +80,15 @@
             android:textColor="#FFFFFF"
             tools:ignore="HardcodedText"
             android:text="OK" />
+
+        <Button
+            android:id="@+id/promptHome"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="180dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="#9FB3C8"
+            tools:ignore="HardcodedText"
+            android:text="Go to home" />
     </LinearLayout>
 </com.sociallimiter.app.overlay.BlockingFrameLayout>

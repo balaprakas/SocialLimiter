@@ -102,6 +102,7 @@ class LimiterEngine(context: Context) {
         OverlayManager.dismissLocked()
         OverlayManager.showPrompt(
             appContext, pkg, monitored.appName, remainingMinutes, remainingMinutes,
+            onHome = { goHome() },
         ) { p, minutes -> beginSession(p, minutes) }
     }
 

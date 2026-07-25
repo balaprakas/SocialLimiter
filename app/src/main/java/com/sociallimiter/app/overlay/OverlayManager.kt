@@ -90,6 +90,7 @@ object OverlayManager {
         appName: String,
         maxMinutes: Int,
         remainingTodayMinutes: Int,
+        onHome: () -> Unit,
         onConfirmed: OnMinutesConfirmed,
     ) {
         main.post {
@@ -114,6 +115,10 @@ object OverlayManager {
                 }
                 dismissPrompt()
                 onConfirmed.onConfirmed(packageName, minutes)
+            }
+            view.findViewById<Button>(R.id.promptHome).setOnClickListener {
+                dismissPrompt()
+                onHome()
             }
             try {
                 wm(context).addView(view, baseParams(focusable = true))
