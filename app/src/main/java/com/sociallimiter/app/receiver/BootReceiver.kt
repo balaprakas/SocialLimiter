@@ -38,6 +38,11 @@ class BootReceiver : BroadcastReceiver() {
                 val now = System.currentTimeMillis()
                 repo.clearExpiredCooldowns(now)
                 for (session in repo.activeSessionsSnapshot()) {
+                    // A paused session stays paused: it resumes (from its frozen
+                    // remaining time) only when the user reopens that app, so don't
+                    // start a ticking countdown for it here.
+                    if (session.pausedRemainingMillis != null) continue
+
                     if (session.endTimestamp > now) {
                         CountdownService.start(appContext, session.packageName, session.endTimestamp)
                     } else {

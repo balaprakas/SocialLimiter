@@ -31,14 +31,17 @@ data class CooldownState(
 )
 
 /**
- * A timed usage session that is currently running for a package. [endTimestamp]
- * (epoch millis) is when the allotted minutes expire. Persisted so the countdown
- * can be restored after process death / reboot.
+ * A timed usage session for a package. [endTimestamp] (epoch millis) is when the
+ * allotted minutes expire while the session is running. The countdown pauses when
+ * the user leaves the app: [pausedRemainingMillis] then holds the frozen remaining
+ * time and [endTimestamp] is ignored until the session resumes. Persisted so the
+ * countdown (running or paused) survives process death / reboot.
  */
 @Entity(tableName = "active_session")
 data class ActiveSession(
     @PrimaryKey val packageName: String,
     val endTimestamp: Long,
+    val pausedRemainingMillis: Long? = null,
 )
 
 /**

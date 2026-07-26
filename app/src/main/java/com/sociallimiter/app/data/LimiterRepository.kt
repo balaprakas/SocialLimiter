@@ -43,7 +43,8 @@ class LimiterRepository private constructor(context: Context) {
     suspend fun activeSessionsSnapshot(): List<ActiveSession> = sessionDao.getAll()
     suspend fun getSession(pkg: String): ActiveSession? = sessionDao.get(pkg)
     suspend fun startSession(pkg: String, endTimestamp: Long) =
-        sessionDao.upsert(ActiveSession(pkg, endTimestamp))
+        sessionDao.upsert(ActiveSession(pkg, endTimestamp, pausedRemainingMillis = null))
+    suspend fun saveSession(session: ActiveSession) = sessionDao.upsert(session)
     suspend fun clearSession(pkg: String) = sessionDao.clear(pkg)
 
     // --- Daily usage / budget ---

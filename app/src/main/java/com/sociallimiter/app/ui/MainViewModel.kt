@@ -88,6 +88,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 cd != null && cd.unlockTimestamp > now ->
                     MonitoredRow(m.packageName, m.appName, m.isEnabled, m.cooldownMinutesOverride,
                         AppStatus.COOLDOWN, cd.unlockTimestamp - now)
+                session?.pausedRemainingMillis != null ->
+                    MonitoredRow(m.packageName, m.appName, m.isEnabled, m.cooldownMinutesOverride,
+                        AppStatus.ACTIVE_SESSION, session.pausedRemainingMillis)
                 session != null && session.endTimestamp > now ->
                     MonitoredRow(m.packageName, m.appName, m.isEnabled, m.cooldownMinutesOverride,
                         AppStatus.ACTIVE_SESSION, session.endTimestamp - now)

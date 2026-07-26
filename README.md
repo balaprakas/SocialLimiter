@@ -33,8 +33,10 @@ Fully local/offline — no backend, no analytics, no network calls.
   Room (`CooldownState`), and shows a **"locked" overlay** with a live countdown
   if you try to reopen the app.
 - **Shared daily budget**: all monitored apps draw from one daily time pool
-  (default 120 min, configurable). Real foreground time is accrued while a
-  session runs; when the budget is exhausted every monitored app is blocked
+  (default 120 min, configurable). Time is accrued only while the app is actually
+  in the foreground — the countdown **pauses when you leave the app** and resumes
+  when you return, so backgrounding doesn't burn budget. When the budget is
+  exhausted every monitored app is blocked
   until **local midnight**, when it resets automatically (`DailyUsage` keyed by
   date). The "How many minutes?" prompt is capped to the time left today.
 - **Scheduled blackout windows**: define recurring windows by days-of-week +
@@ -138,11 +140,12 @@ When a monitored app comes to the foreground, checks apply in this order:
 5. **Otherwise** → the **"How many minutes?"** overlay appears (capped to the
    time left in today's budget); enter minutes, tap OK.
 
-Then a **foreground countdown** starts (persistent notification) and real
-in-app time is subtracted from the daily budget. On zero → home screen + a
-**cooldown** window opens (default 15 min, configurable globally or per app). If
-the daily budget runs out mid-session, the session ends early and everything is
-blocked until midnight.
+Then a **foreground countdown** starts (persistent notification) and in-app time
+is subtracted from the daily budget. Leaving the app **pauses** the countdown
+(and budget accrual); reopening it resumes from the remaining time. On zero →
+home screen + a **cooldown** window opens (default 15 min, configurable globally
+or per app). If the daily budget runs out mid-session, the session ends early and
+everything is blocked until midnight.
 
 ### Project layout
 ```
@@ -169,8 +172,10 @@ It's added to the Room-backed monitored list immediately — no rebuild needed.
   aggressive OEM skins you may need to also "lock" the app in recents.
 - This is a self-discipline tool, not a security boundary — a determined user
   with device settings access can disable it.
-- Daily-budget time is accrued while a timed session is running (i.e. the minutes
-  you committed to), not by sampling exact foreground focus second-by-second, so
-  backgrounding an app mid-session still counts toward the day's budget.
+- Daily-budget time is accrued only while the monitored app is in the foreground:
+  the countdown pauses when you leave the app and resumes when you return, so
+  backgrounding it does not burn budget. Foreground detection uses accessibility
+  window-state events plus a UsageStats event poll (latest `MOVE_TO_FOREGROUND`)
+  as a backup, so it reflects the app that's actually on screen.
 - The daily budget resets at **local** midnight; changing the device time zone
   shifts the reset accordingly.

@@ -1,6 +1,7 @@
 package com.sociallimiter.app.service
 
 import android.accessibilityservice.AccessibilityService
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Handler
@@ -96,21 +97,41 @@ class AppMonitorService : AccessibilityService() {
     companion object {
         private const val POLL_INTERVAL_MS = 2000L
 
+        /** How far back to scan usage events when resolving the foreground app. */
+        private const val FOREGROUND_LOOKBACK_MS = 60_000L
+
         @Volatile
         var instanceRunning: Boolean = false
             private set
 
-        /** Best-effort current foreground package via UsageStats (backup path). */
+        /**
+         * Best-effort current foreground package via UsageStats (backup path).
+         *
+         * Uses the usage *event* stream rather than aggregated `queryUsageStats` +
+         * `lastTimeUsed`: the latest MOVE_TO_FOREGROUND event reflects the app that
+         * is actually on screen right now. The aggregate approach kept reporting a
+         * monitored app as foreground for a while after the user had already left
+         * it, which caused the prompt to reappear over the home screen.
+         */
         fun queryForegroundPackage(context: Context): String? {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
                 ?: return null
             val now = System.currentTimeMillis()
-            val stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                now - 60_000L,
-                now,
-            ) ?: return null
-            return stats.maxByOrNull { it.lastTimeUsed }?.packageName
+            val events = usm.queryEvents(now - FOREGROUND_LOOKBACK_MS, now) ?: return null
+            val event = UsageEvents.Event()
+            var latestPackage: String? = null
+            var latestTime = Long.MIN_VALUE
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                @Suppress("DEPRECATION")
+                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND &&
+                    event.timeStamp >= latestTime
+                ) {
+                    latestTime = event.timeStamp
+                    latestPackage = event.packageName
+                }
+            }
+            return latestPackage
         }
     }
 }

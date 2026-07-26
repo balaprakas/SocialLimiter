@@ -32,6 +32,13 @@ class LimiterEngine(context: Context) {
 
     /** React to [pkg] coming to the foreground. */
     suspend fun onForeground(pkg: String) {
+        // Leaving a monitored app with a running countdown? Freeze it so the timer
+        // (and daily-budget accrual) only advances while the app is actually up.
+        val running = CountdownService.activePackage
+        if (running != null && running != pkg && !CountdownService.isPaused) {
+            CountdownService.requestPause()
+        }
+
         val monitored = repo.getMonitored(pkg)
         if (monitored == null || !monitored.isEnabled) {
             // Left the monitored app (e.g. went to the launcher). Dismiss only the
@@ -72,11 +79,18 @@ class LimiterEngine(context: Context) {
             repo.clearCooldown(pkg)
         }
 
-        // 3. An active timed session: allow use until it expires.
+        // 3. An active timed session: allow use until it expires. The session may
+        // be paused (user had left the app); resume it from its remaining time.
         val session = repo.getSession(pkg)
         if (session != null) {
-            if (now < session.endTimestamp) {
+            val remaining = session.pausedRemainingMillis ?: (session.endTimestamp - now)
+            if (remaining > 0L) {
                 OverlayManager.dismissAll()
+                // Revive the countdown for this app if it isn't already running
+                // (paused, or the service was killed).
+                if (CountdownService.activePackage != pkg || CountdownService.isPaused) {
+                    CountdownService.start(appContext, pkg, now + remaining)
+                }
                 return
             }
             // Session already expired but wasn't cleaned up (e.g. service killed).
