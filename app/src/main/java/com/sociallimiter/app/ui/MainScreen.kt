@@ -30,6 +30,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
 import com.sociallimiter.app.data.Schedule
 import com.sociallimiter.app.util.PermissionUtils
@@ -75,42 +78,105 @@ fun MainScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    var selectedTab by remember { mutableIntStateOf(0) }
+    val dashboard by viewModel.dashboardState.collectAsStateWithLifecycle()
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("SocialLimiter") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(if (selectedTab == 0) "SocialLimiter" else "Usage dashboard") },
+            )
+        },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { Spacer(Modifier.height(4.dp)) }
-            state.globalBlockLabel?.let { label ->
-                item { GlobalBlockBanner(label) }
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
+                    text = { Text("Settings") })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
+                    text = { Text("Dashboard") })
             }
-            item { PermissionsCard(context, permissionTick, onRequestNotifications) }
-            item { DailyBudgetCard(state, viewModel) }
-            item { GlobalCooldownCard(state, viewModel) }
-            item { SchedulesCard(state, viewModel) }
+            if (selectedTab == 0) {
+                SettingsList(state, context, permissionTick, onRequestNotifications, viewModel)
+            } else {
+                DashboardScreen(
+                    state = dashboard,
+                    onClearHistory = viewModel::clearUsageHistory,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsList(
+    state: UiState,
+    context: Context,
+    permissionTick: Int,
+    onRequestNotifications: () -> Unit,
+    viewModel: MainViewModel,
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item { Spacer(Modifier.height(4.dp)) }
+        state.globalBlockLabel?.let { label ->
+            item { GlobalBlockBanner(label) }
+        }
+        item { PauseCard(state, viewModel) }
+        item { PermissionsCard(context, permissionTick, onRequestNotifications) }
+        item { DailyBudgetCard(state, viewModel) }
+        item { GlobalCooldownCard(state, viewModel) }
+        item { SchedulesCard(state, viewModel) }
+        item {
+            SectionHeader("Monitored apps", "Active session, cooldown, or idle")
+        }
+        if (state.monitored.isEmpty()) {
             item {
-                SectionHeader("Monitored apps", "Active session, cooldown, or idle")
+                Text(
+                    "No apps monitored yet. Add some below.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
             }
-            if (state.monitored.isEmpty()) {
-                item {
-                    Text(
-                        "No apps monitored yet. Add some below.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
+        }
+        items(state.monitored, key = { it.packageName }) { row ->
+            MonitoredAppCard(row, viewModel)
+        }
+        item { SectionHeader("Add apps", "Toggle any installed app into the monitored list") }
+        item { AddAppsList(state, viewModel) }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun PauseCard(state: UiState, viewModel: MainViewModel) {
+    Card(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (state.enforcementPaused) "Protection paused" else "Protection active",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (state.enforcementPaused) Color(0xFFE0902B) else Color(0xFF2E9E5B),
+                )
+                Text(
+                    "Pause stops all limits without touching your settings — everything " +
+                        "resumes as configured. Also toggleable from the ongoing notification.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            items(state.monitored, key = { it.packageName }) { row ->
-                MonitoredAppCard(row, viewModel)
-            }
-            item { SectionHeader("Add apps", "Toggle any installed app into the monitored list") }
-            item { AddAppsList(state, viewModel) }
-            item { Spacer(Modifier.height(24.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = !state.enforcementPaused,
+                onCheckedChange = { viewModel.setEnforcementPaused(!it) },
+            )
         }
     }
 }

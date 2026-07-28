@@ -45,11 +45,25 @@ Fully local/offline — no backend, no analytics, no network calls.
   before the start time are treated as crossing midnight.
 - **Persistent across kills & reboots**: active sessions and cooldowns live in
   Room and are restored on `BOOT_COMPLETED`.
-- **Settings UI** (Jetpack Compose): permission status + one-tap grant buttons,
-  daily budget + time-left-today, global default cooldown, per-app cooldown
-  override, scheduled-break editor (day chips + time pickers), per-app live
-  status (idle / active session / in cooldown), and a searchable installed-apps
-  list to add/remove monitored apps.
+- **Pause / resume from a persistent notification**: an ongoing notification
+  exposes a one-tap **Pause / Resume** action, reachable from any screen without
+  opening the app. Pausing stops all prompts/blocks and freezes any running
+  countdown; **nothing configured is lost** — monitored apps, schedules, budget,
+  cooldowns and the in-progress session all resume exactly as they were on
+  resume. (This is a *soft* pause: the accessibility service stays enabled, so
+  apps that reject any enabled accessibility service are unaffected by it.) The
+  same toggle is mirrored by a switch at the top of the settings screen.
+- **Usage dashboard**: a second tab charts your behaviour, all stored locally in
+  a `UsageEvent` table. Shows today's opens / blocked attempts / time used,
+  a 7-day **time-per-day** bar chart and an **opens-vs-blocked** trend chart, and
+  a per-app breakdown of opens, prompts you backed out of, and blocked attempts
+  split by reason (schedule / cooldown / budget). Events (and daily totals) are
+  retained for ~90 days and can be cleared from the dashboard.
+- **Settings UI** (Jetpack Compose): pause/resume switch, permission status +
+  one-tap grant buttons, daily budget + time-left-today, global default cooldown,
+  per-app cooldown override, scheduled-break editor (day chips + time pickers),
+  per-app live status (idle / active session / in cooldown), and a searchable
+  installed-apps list to add/remove monitored apps.
 
 ## Requirements
 

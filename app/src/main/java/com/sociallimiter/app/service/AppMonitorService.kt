@@ -8,10 +8,13 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
+import com.sociallimiter.app.data.LimiterRepository
+import com.sociallimiter.app.util.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -26,6 +29,7 @@ class AppMonitorService : AccessibilityService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val engine by lazy { LimiterEngine(this) }
+    private val repo by lazy { LimiterRepository.get(this) }
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var lastHandledPackage: String? = null
@@ -62,6 +66,29 @@ class AppMonitorService : AccessibilityService() {
         ignoredPackages.add(packageName)
         refreshInputMethodPackages()
         mainHandler.postDelayed(poller, POLL_INTERVAL_MS)
+        observePauseState()
+    }
+
+    /**
+     * Keeps the persistent Pause/Resume notification in sync with the flag and
+     * applies the side effects when it flips (from either the notification action
+     * or the in-app switch): pausing freezes a running countdown; resuming
+     * re-evaluates the current foreground app so blocking/countdown pick back up.
+     */
+    private fun observePauseState() {
+        scope.launch {
+            repo.enforcementPaused.collectLatest { paused ->
+                Notifications.postStatus(applicationContext, paused)
+                if (paused) {
+                    if (CountdownService.activePackage != null && !CountdownService.isPaused) {
+                        CountdownService.requestPause()
+                    }
+                } else {
+                    lastHandledPackage = null
+                    queryForegroundPackage(this@AppMonitorService)?.let { engine.onForeground(it) }
+                }
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -90,6 +117,7 @@ class AppMonitorService : AccessibilityService() {
     override fun onDestroy() {
         instanceRunning = false
         mainHandler.removeCallbacks(poller)
+        Notifications.cancelStatus(applicationContext)
         scope.cancel()
         super.onDestroy()
     }

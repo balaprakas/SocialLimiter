@@ -3,8 +3,13 @@ package com.sociallimiter.app.service
 import android.content.Context
 import android.content.Intent
 import com.sociallimiter.app.data.LimiterRepository
+import com.sociallimiter.app.data.UsageEventType
 import com.sociallimiter.app.overlay.OverlayManager
 import com.sociallimiter.app.util.TimeUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Central decision logic shared by the accessibility service and the UsageStats
@@ -26,12 +31,24 @@ class LimiterEngine(context: Context) {
 
     private val appContext = context.applicationContext
     private val repo = LimiterRepository.get(appContext)
+    private val logScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Why a running session was ended, controlling what block follows it. */
     enum class EndReason { TIMER, DAILY_BUDGET }
 
     /** React to [pkg] coming to the foreground. */
     suspend fun onForeground(pkg: String) {
+        // Global "protection paused" switch (persistent-notification toggle): don't
+        // prompt or block anything, and freeze any running countdown so paused time
+        // isn't consumed. All saved config stays intact and resumes on unpause.
+        if (repo.isEnforcementPaused()) {
+            OverlayManager.dismissAll()
+            if (CountdownService.activePackage != null && !CountdownService.isPaused) {
+                CountdownService.requestPause()
+            }
+            return
+        }
+
         // Leaving a monitored app with a running countdown? Freeze it so the timer
         // (and daily-budget accrual) only advances while the app is actually up.
         val running = CountdownService.activePackage
@@ -53,6 +70,7 @@ class LimiterEngine(context: Context) {
         // 1. Scheduled blackout window blocks everything.
         val window = TimeUtils.activeWindow(repo.enabledSchedules(), now)
         if (window != null) {
+            repo.logEvent(pkg, monitored.appName, UsageEventType.BLOCKED_SCHEDULE)
             goHome()
             OverlayManager.showLocked(
                 appContext, pkg, monitored.appName,
@@ -67,6 +85,7 @@ class LimiterEngine(context: Context) {
         val cooldown = repo.getCooldown(pkg)
         if (cooldown != null) {
             if (now < cooldown.unlockTimestamp) {
+                repo.logEvent(pkg, monitored.appName, UsageEventType.BLOCKED_COOLDOWN)
                 goHome()
                 OverlayManager.showLocked(
                     appContext, pkg, monitored.appName,
@@ -101,6 +120,7 @@ class LimiterEngine(context: Context) {
         // 4. Shared daily budget across all monitored apps.
         val remainingMillis = repo.remainingBudgetMillis()
         if (remainingMillis <= 0L) {
+            repo.logEvent(pkg, monitored.appName, UsageEventType.BLOCKED_BUDGET)
             goHome()
             OverlayManager.showLocked(
                 appContext, pkg, monitored.appName,
@@ -114,15 +134,23 @@ class LimiterEngine(context: Context) {
         // 5. Fresh open: ask for a duration, capped to what's left today.
         val remainingMinutes = (remainingMillis / 60_000L).toInt().coerceAtLeast(1)
         OverlayManager.dismissLocked()
+        val appName = monitored.appName
         OverlayManager.showPrompt(
-            appContext, pkg, monitored.appName, remainingMinutes, remainingMinutes,
-            onHome = { goHome() },
+            appContext, pkg, appName, remainingMinutes, remainingMinutes,
+            onHome = {
+                logScope.launch { repo.logEvent(pkg, appName, UsageEventType.PROMPT_ABANDONED) }
+                goHome()
+            },
         ) { p, minutes -> beginSession(p, minutes) }
     }
 
     /** Called from the prompt's OK button: start a timed session + countdown. */
     fun beginSession(pkg: String, minutes: Int) {
         val endAt = System.currentTimeMillis() + minutes * 60_000L
+        logScope.launch {
+            val appName = repo.getMonitored(pkg)?.appName ?: pkg
+            repo.logEvent(pkg, appName, UsageEventType.SESSION_START, extra = minutes.toLong())
+        }
         CountdownService.start(appContext, pkg, endAt)
     }
 
@@ -136,6 +164,7 @@ class LimiterEngine(context: Context) {
         val monitored = repo.getMonitored(pkg)
         val appName = monitored?.appName ?: pkg
         repo.clearSession(pkg)
+        repo.logEvent(pkg, appName, UsageEventType.SESSION_END, extra = reason.ordinal.toLong())
         CountdownService.stop(appContext)
         goHome()
 

@@ -73,14 +73,33 @@ interface DailyUsageDao {
     @Query("SELECT * FROM daily_usage WHERE date = :date LIMIT 1")
     fun observe(date: String): Flow<DailyUsage?>
 
+    @Query("SELECT * FROM daily_usage ORDER BY date DESC")
+    fun observeAll(): Flow<List<DailyUsage>>
+
     @Query("SELECT usedMillis FROM daily_usage WHERE date = :date LIMIT 1")
     suspend fun getUsed(date: String): Long?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(usage: DailyUsage)
 
-    @Query("DELETE FROM daily_usage WHERE date != :keepDate")
-    suspend fun deleteAllExcept(keepDate: String)
+    // ISO yyyy-MM-dd sorts lexicographically, so a string compare prunes old days.
+    @Query("DELETE FROM daily_usage WHERE date < :cutoffDate")
+    suspend fun deleteOlderThan(cutoffDate: String)
+}
+
+@Dao
+interface UsageEventDao {
+    @Insert
+    suspend fun insert(event: UsageEvent)
+
+    @Query("SELECT * FROM usage_event WHERE timestampMillis >= :since ORDER BY timestampMillis DESC")
+    fun observeSince(since: Long): Flow<List<UsageEvent>>
+
+    @Query("DELETE FROM usage_event WHERE timestampMillis < :cutoff")
+    suspend fun pruneOlderThan(cutoff: Long)
+
+    @Query("DELETE FROM usage_event")
+    suspend fun clearAll()
 }
 
 @Dao

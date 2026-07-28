@@ -14,8 +14,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ActiveSession::class,
         DailyUsage::class,
         Schedule::class,
+        UsageEvent::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activeSessionDao(): ActiveSessionDao
     abstract fun dailyUsageDao(): DailyUsageDao
     abstract fun scheduleDao(): ScheduleDao
+    abstract fun usageEventDao(): UsageEventDao
 
     companion object {
         @Volatile
@@ -54,13 +56,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `usage_event` " +
+                        "(`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "`packageName` TEXT NOT NULL, `appName` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, `timestampMillis` INTEGER NOT NULL, " +
+                        "`extra` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "social_limiter.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .build().also { INSTANCE = it }
             }
     }
 }

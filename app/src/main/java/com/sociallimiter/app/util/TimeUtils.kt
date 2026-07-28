@@ -14,6 +14,9 @@ object TimeUtils {
 
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
+    /** ISO `yyyy-MM-dd` formatter, matching [dayKey]'s bucket keys. */
+    val isoDate: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
+
     /** Local `yyyy-MM-dd` for [nowMillis]; used as the daily-usage bucket key. */
     fun dayKey(nowMillis: Long = System.currentTimeMillis()): String =
         Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault())

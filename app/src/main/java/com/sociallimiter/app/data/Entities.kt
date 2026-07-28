@@ -75,3 +75,40 @@ data class Schedule(
     val endMinuteOfDay: Int,
     val isEnabled: Boolean = true,
 )
+
+/** The kinds of events recorded for the usage dashboard. */
+enum class UsageEventType {
+    /** A timed session was started (user committed minutes). */
+    SESSION_START,
+
+    /** A timed session ended (timer expiry or daily-budget exhaustion). */
+    SESSION_END,
+
+    /** An open was blocked because a scheduled blackout window was active. */
+    BLOCKED_SCHEDULE,
+
+    /** An open was blocked because the app was in cooldown. */
+    BLOCKED_COOLDOWN,
+
+    /** An open was blocked because the shared daily budget was exhausted. */
+    BLOCKED_BUDGET,
+
+    /** The minutes prompt was shown but the user backed out via "Go to home". */
+    PROMPT_ABANDONED,
+}
+
+/**
+ * A single recorded event for the usage dashboard. [type] is a [UsageEventType]
+ * name. [extra] carries a type-specific number: committed minutes for
+ * SESSION_START, elapsed millis for SESSION_END, otherwise 0. Fully local; never
+ * leaves the device.
+ */
+@Entity(tableName = "usage_event")
+data class UsageEvent(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val packageName: String,
+    val appName: String,
+    val type: String,
+    val timestampMillis: Long,
+    val extra: Long = 0L,
+)

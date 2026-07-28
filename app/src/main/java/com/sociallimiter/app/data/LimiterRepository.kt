@@ -17,6 +17,7 @@ class LimiterRepository private constructor(context: Context) {
     private val sessionDao = db.activeSessionDao()
     private val dailyUsageDao = db.dailyUsageDao()
     private val scheduleDao = db.scheduleDao()
+    private val usageEventDao = db.usageEventDao()
     private val settings = SettingsStore(context)
 
     // --- Monitored apps ---
@@ -55,14 +56,17 @@ class LimiterRepository private constructor(context: Context) {
 
     suspend fun usedMillisToday(): Long = dailyUsageDao.getUsed(TimeUtils.dayKey()) ?: 0L
 
-    /** Adds [deltaMillis] of foreground time to today's bucket and prunes old days. */
+    /** Adds [deltaMillis] of foreground time to today's bucket, keeping history. */
     suspend fun addUsage(deltaMillis: Long) {
         if (deltaMillis <= 0) return
         val key = TimeUtils.dayKey()
         val current = dailyUsageDao.getUsed(key) ?: 0L
         dailyUsageDao.upsert(DailyUsage(key, current + deltaMillis))
-        dailyUsageDao.deleteAllExcept(key)
+        // Retain a rolling window of daily totals so the dashboard can chart trends.
+        dailyUsageDao.deleteOlderThan(TimeUtils.dayKey(System.currentTimeMillis() - HISTORY_WINDOW_MS))
     }
+
+    fun observeDailyUsage(): Flow<List<DailyUsage>> = dailyUsageDao.observeAll()
 
     /** Remaining daily budget in millis (>= 0). */
     suspend fun remainingBudgetMillis(): Long {
@@ -76,6 +80,32 @@ class LimiterRepository private constructor(context: Context) {
     suspend fun upsertSchedule(schedule: Schedule) = scheduleDao.upsert(schedule)
     suspend fun deleteSchedule(id: Long) = scheduleDao.delete(id)
 
+    // --- Usage events (dashboard) ---
+    fun observeRecentEvents(): Flow<List<UsageEvent>> =
+        usageEventDao.observeSince(System.currentTimeMillis() - HISTORY_WINDOW_MS)
+
+    suspend fun logEvent(pkg: String, appName: String, type: UsageEventType, extra: Long = 0L) {
+        usageEventDao.insert(
+            UsageEvent(
+                packageName = pkg,
+                appName = appName,
+                type = type.name,
+                timestampMillis = System.currentTimeMillis(),
+                extra = extra,
+            ),
+        )
+        usageEventDao.pruneOlderThan(System.currentTimeMillis() - HISTORY_WINDOW_MS)
+    }
+
+    suspend fun clearUsageHistory() {
+        usageEventDao.clearAll()
+    }
+
+    // --- Enforcement pause ---
+    val enforcementPaused: Flow<Boolean> = settings.enforcementPaused
+    suspend fun isEnforcementPaused(): Boolean = settings.isEnforcementPaused()
+    suspend fun setEnforcementPaused(paused: Boolean) = settings.setEnforcementPaused(paused)
+
     // --- Settings ---
     val defaultCooldownMinutes: Flow<Int> = settings.defaultCooldownMinutes
     suspend fun setDefaultCooldownMinutes(minutes: Int) =
@@ -88,6 +118,9 @@ class LimiterRepository private constructor(context: Context) {
     }
 
     companion object {
+        /** Rolling retention window for daily totals and usage events (~90 days). */
+        private const val HISTORY_WINDOW_MS = 90L * 24 * 60 * 60 * 1000
+
         @Volatile
         private var INSTANCE: LimiterRepository? = null
 

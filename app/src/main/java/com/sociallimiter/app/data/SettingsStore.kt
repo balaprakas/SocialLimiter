@@ -3,6 +3,7 @@ package com.sociallimiter.app.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -38,10 +39,22 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_DAILY_BUDGET] = minutes.coerceAtLeast(1) }
     }
 
+    /** Global "protection paused" switch, toggled from the persistent notification. */
+    val enforcementPaused: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_ENFORCEMENT_PAUSED] ?: false }
+
+    suspend fun isEnforcementPaused(): Boolean =
+        enforcementPaused.first()
+
+    suspend fun setEnforcementPaused(paused: Boolean) {
+        context.dataStore.edit { it[KEY_ENFORCEMENT_PAUSED] = paused }
+    }
+
     companion object {
         const val DEFAULT_COOLDOWN_MINUTES = 15
         const val DEFAULT_DAILY_BUDGET_MINUTES = 120
         private val KEY_DEFAULT_COOLDOWN = intPreferencesKey("default_cooldown_minutes")
         private val KEY_DAILY_BUDGET = intPreferencesKey("daily_budget_minutes")
+        private val KEY_ENFORCEMENT_PAUSED = booleanPreferencesKey("enforcement_paused")
     }
 }

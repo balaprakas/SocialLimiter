@@ -57,6 +57,14 @@
         </service>
 
         <receiver
+            android:name=".receiver.PauseToggleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.sociallimiter.app.action.TOGGLE_PAUSE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".receiver.BootReceiver"
             android:exported="true">
             <intent-filter>
